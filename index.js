@@ -34,7 +34,7 @@ app.get('/', (req, res) => {
   res.sendFile(__dirname + '/views/index.html');
 });
 
-// 2. Create new user with username
+// Create new user with username
 app.post('/api/users', async (req, res) => {
   try {
     const username = req.body.username;
@@ -49,7 +49,7 @@ app.post('/api/users', async (req, res) => {
   }
 });
 
-// 4,5,6. Get all users
+// Get all users
 app.get('/api/users', async (req, res) => {
   try {
     const users = await User.find({}, '_id username').exec();
@@ -59,7 +59,7 @@ app.get('/api/users', async (req, res) => {
   }
 });
 
-// 7,8. Add exercise to user
+// Add exercise to user
 app.post('/api/users/:_id/exercises', async (req, res) => {
   try {
     const { description, duration, date } = req.body;
@@ -72,12 +72,27 @@ app.post('/api/users/:_id/exercises', async (req, res) => {
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    const exerciseDate = date ? new Date(date) : new Date();
+    // If date not provided or invalid, use current date
+    let exerciseDate;
+    if (!date) {
+      exerciseDate = new Date();
+    } else {
+      exerciseDate = new Date(date);
+      if (exerciseDate.toString() === "Invalid Date") {
+        exerciseDate = new Date();
+      }
+    }
+
+    // Parse duration as number
+    const durationNumber = Number(duration);
+    if (isNaN(durationNumber)) {
+      return res.status(400).json({ error: 'Duration must be a number' });
+    }
 
     const exercise = new Exercise({
       userId,
       description,
-      duration: parseInt(duration),
+      duration: durationNumber,
       date: exerciseDate
     });
 
@@ -95,7 +110,7 @@ app.post('/api/users/:_id/exercises', async (req, res) => {
   }
 });
 
-// 9-16. Get exercise logs with optional from, to, limit filters
+// Get exercise logs with optional filters
 app.get('/api/users/:_id/logs', async (req, res) => {
   try {
     const userId = req.params._id;
@@ -106,14 +121,31 @@ app.get('/api/users/:_id/logs', async (req, res) => {
 
     let filter = { userId };
 
+    // Date filtering: ensure valid dates
     if (from || to) {
       filter.date = {};
-      if (from) filter.date.$gte = new Date(from);
-      if (to) filter.date.$lte = new Date(to);
+      if (from) {
+        const fromDate = new Date(from);
+        if (fromDate.toString() !== "Invalid Date") {
+          filter.date.$gte = fromDate;
+        }
+      }
+      if (to) {
+        const toDate = new Date(to);
+        if (toDate.toString() !== "Invalid Date") {
+          filter.date.$lte = toDate;
+        }
+      }
     }
 
-    let query = Exercise.find(filter).select('description duration date -_id');
-    if (limit) query = query.limit(parseInt(limit));
+    let query = Exercise.find(filter).select('description duration date -_id').sort({ date: 'asc' });
+
+    if (limit) {
+      const limitNumber = parseInt(limit);
+      if (!isNaN(limitNumber)) {
+        query = query.limit(limitNumber);
+      }
+    }
 
     const exercises = await query.exec();
 
